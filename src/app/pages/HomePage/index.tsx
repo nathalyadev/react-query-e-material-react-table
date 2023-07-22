@@ -53,21 +53,22 @@ export function HomePage() {
     );
     const [globalFilter, setGlobalFilter] = useState<string>();
     const [sorting, setSorting] = useState<MRT_SortingState>([]);
-    const { data, fetchNextPage, isError, isFetching, isLoading } = useInfiniteQuery({
+    const { data, fetchNextPage, isError, isFetching, isLoading } = useInfiniteQuery<UserApiResponse>({
         queryKey: ["users"],
         queryFn: async ({ pageParam = 0 }) => {
             const url = new URL(
                 '/users', 'https://64ade1c4b470006a5ec677a5.mockapi.io',
             );
-            url.searchParams.set('limit', `${pageParam * fetchSize}`);
-            url.searchParams.set('page', `${pageParam}`);
+            url.searchParams.set('limit', `${Number(pageParam) * fetchSize}`);
+            url.searchParams.set('page', `${Number(pageParam)}`);
 
             const response = await fetch(url.href);
             const json = (await response.json()) as UserApiResponse;
             return json;
         },
         getNextPageParam: (_lastGroup, groups) => groups.length,
-        defaultPageParam: 1
+        defaultPageParam: 1,
+        refetchOnWindowFocus: false,
     })
 
     const flatData = data?.pages[0] ?? []
