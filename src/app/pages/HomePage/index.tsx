@@ -3,7 +3,7 @@ import MaterialReactTable, { MRT_Virtualizer, MRT_ColumnFiltersState, MRT_Sortin
 import { UIEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Typography } from "@mui/material";
 import { api } from "../../shared/services/api";
-import { Teste } from "../../shared/components/Teste";
+import { AxiosError } from "axios";
 
 interface IUsersDataProps {
     avatar: string;
@@ -14,13 +14,9 @@ interface IUsersDataProps {
 
 type UserApiResponse = {
     data: Array<IUsersDataProps[]>;
-
     page: number;
     totalRowCount: number;
-
 };
-
-const fetchSize = 25;
 
 const columns: MRT_ColumnDef<IUsersDataProps>[] = [
     {
@@ -44,6 +40,32 @@ const columns: MRT_ColumnDef<IUsersDataProps>[] = [
     },
 
 ];
+interface ApiError {
+    message: string;
+}
+const fetchUsers = async (page: number): Promise<UserApiResponse> => {
+    try {
+        const { data } = await api.get(`/users`, {
+            params: {
+                page,
+                limit: 25
+            }
+        })
+
+        return data
+    } catch (error) {
+        const apiError = error as AxiosError<ApiError>;
+        if (apiError.response) {
+            throw new Error(
+                `Erro na resposta da API: ${apiError.response.status} - ${apiError.response.data.message}`
+            );
+        } else if (apiError.request) {
+            throw new Error("Erro na requisição à API.");
+        } else {
+            throw new Error("Erro ao processar a requisição.");
+        }
+    }
+}
 
 export function HomePage() {
     const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -57,18 +79,16 @@ export function HomePage() {
     const [globalFilter, setGlobalFilter] = useState<string>();
     const [sorting, setSorting] = useState<MRT_SortingState>([]);
 
-    const [pageParam, setPageParam] = useState(1)
-    async function fetchUsers(page: number, limit: number) {
-        const response = await api.get<UserApiResponse>(`/users?page=${page}&limit=${limit}`).then((res) => res);
-        setPageParam(response.data.page)
-        return response.data
-    }
     const { data, fetchNextPage, isError, isFetching, isLoading, hasNextPage, } = useInfiniteQuery<UserApiResponse>({
-        queryKey: ["users", pageParam],
-        queryFn: ({ pageParam = 1 }) => fetchUsers(Number(pageParam), Number(pageParam) * fetchSize),
-        // getNextPageParam: (_lastGroup, groups) => groups.length,
-        getNextPageParam: (lastGroup, groups) => lastGroup.data && groups.length + 1,
-        defaultPageParam: pageParam,
+        queryKey: ["users"],
+        queryFn: ({ pageParam = 1 }) => fetchUsers(Number(pageParam)),
+        getNextPageParam: (lastPage, allPages) => {
+            const maxPages = lastPage.totalRowCount / 25;
+            const nextPage = allPages.length + 1;
+            return nextPage <= maxPages ? nextPage : undefined;
+        },
+        // getNextPageParam: (lastGroup, groups) => lastGroup.data && groups.length + 1,
+        defaultPageParam: 1,
         refetchOnWindowFocus: false,
     })
 
@@ -79,33 +99,47 @@ export function HomePage() {
     const totalFetched = flatData.toString().length;
 
     const fetchMoreOnBottomReached = useCallback(
-        (containerRefElement: HTMLDivElement | null) => {
+        async (containerRefElement: HTMLDivElement | null) => {
             let fetching = false;
+            const scrollElement = document.documentElement;
+            const { scrollHeight, scrollTop, clientHeight } = scrollElement;
 
+            console.log(!fetching && scrollHeight - scrollTop <= clientHeight * 1.5, "Aq")
+            console.log(!fetching , "fetching")
+                console.log(scrollHeight, "Aq")
+                console.log(scrollHeight - scrollTop <= clientHeight * 1.5, "Aqui")
             if (containerRefElement) {
-                const { scrollHeight, scrollTop, clientHeight } = containerRefElement;
-                // if (
-                //     Number(data?.pages.length) > 0 &&
-                //     !isFetching &&
-                //     Number(data?.pages?.[0].page) <
-                //     (fetchSize.toString().length === 0
-                //         ? Number(data?.pages?.[0].totalRowCount) - 1
-                //         : Number(data?.pages?.[0].totalRowCount))
-                // ) {
-                //     fetchNextPage();
-                // }
-                if (
-                    scrollHeight - scrollTop - clientHeight < 400 &&
-                    !isFetching
-                    // && totalFetched < totalDBRowCount
-                ) {
+                if (!fetching && scrollHeight - scrollTop <= clientHeight * 1.5) {
                     fetching = true;
-                    fetchNextPage().then(() => { fetching = false; });
+                    console.log(hasNextPage, "hasNextPage")
+                    if (hasNextPage) await fetchNextPage().then(() => { fetching = false; });
                     fetching = false;
                 }
             }
+            // if (containerRefElement) {
+            //     const { scrollHeight, scrollTop, clientHeight } = containerRefElement;
+            //     // if (
+            //     //     Number(data?.pages.length) > 0 &&
+            //     //     !isFetching &&
+            //     //     Number(data?.pages?.[0].page) <
+            //     //     (fetchSize.toString().length === 0
+            //     //         ? Number(data?.pages?.[0].totalRowCount) - 1
+            //     //         : Number(data?.pages?.[0].totalRowCount))
+            //     // ) {
+            //     //     fetchNextPage();
+            //     // }
+            //     if (
+            //         scrollHeight - scrollTop - clientHeight < 400 &&
+            //         !isFetching
+            //         // && totalFetched < totalDBRowCount
+            //     ) {
+            //         fetching = true;
+            //         fetchNextPage().then(() => { fetching = false; });
+            //         fetching = false;
+            //     }
+            // }
         },
-        [fetchNextPage, isFetching, totalFetched, totalDBRowCount, pageParam],
+        [fetchNextPage, isFetching, totalFetched, totalDBRowCount],
     );
 
     useEffect(() => {
@@ -114,15 +148,15 @@ export function HomePage() {
         } catch (error) {
             console.error(error);
         }
-    }, [sorting, columnFilters, globalFilter, pageParam, hasNextPage]);
+    }, [sorting, columnFilters, globalFilter, hasNextPage]);
 
     useEffect(() => {
         fetchMoreOnBottomReached(tableContainerRef.current);
-    }, [fetchMoreOnBottomReached, pageParam, hasNextPage]);
+    }, [fetchMoreOnBottomReached, hasNextPage]);
 
     return (
         <>
-            {/* <Typography style={{ textAlign: "center" }} variant="h5">HOME</Typography>
+            <Typography style={{ textAlign: "center" }} variant="h5">HOME</Typography>
             <div style={{ maxWidth: "80%", margin: "0 auto" }}>
 
                 <MaterialReactTable
@@ -163,13 +197,9 @@ export function HomePage() {
                     }}
                     rowVirtualizerInstanceRef={rowVirtualizerInstanceRef} //get access to the virtualizer instance
                     rowVirtualizerProps={{ overscan: 4 }}
-                /> */}
+                />
 
-
-
-                <h1>Teste</h1>
-                <Teste />
-            {/* </div> */}
+            </div>
         </>
     )
 }
