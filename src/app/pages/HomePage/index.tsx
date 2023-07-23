@@ -2,6 +2,8 @@ import { useInfiniteQuery } from "@tanstack/react-query"
 import MaterialReactTable, { MRT_Virtualizer, MRT_ColumnFiltersState, MRT_SortingState, MRT_ColumnDef } from "material-react-table";
 import { UIEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Typography } from "@mui/material";
+import { api } from "../../shared/services/api";
+import { Teste } from "../../shared/components/Teste";
 
 interface IUsersDataProps {
     avatar: string;
@@ -11,14 +13,14 @@ interface IUsersDataProps {
 }
 
 type UserApiResponse = {
-    data: Array<IUsersDataProps>;
-    meta: {
-        page: number;
-        totalRowCount: number;
-    };
+    data: Array<IUsersDataProps[]>;
+
+    page: number;
+    totalRowCount: number;
+
 };
 
-const fetchSize = 10;
+const fetchSize = 25;
 
 const columns: MRT_ColumnDef<IUsersDataProps>[] = [
     {
@@ -44,53 +46,66 @@ const columns: MRT_ColumnDef<IUsersDataProps>[] = [
 ];
 
 export function HomePage() {
-    const tableContainerRef = useRef<HTMLTableElement>(null);
+    const tableContainerRef = useRef<HTMLDivElement>(null);
     const rowVirtualizerInstanceRef =
         useRef<MRT_Virtualizer<HTMLDivElement, HTMLTableRowElement>>(null);
 
     const [columnFilters, setColumnFilters] = useState<MRT_ColumnFiltersState>(
         [],
     );
+
     const [globalFilter, setGlobalFilter] = useState<string>();
     const [sorting, setSorting] = useState<MRT_SortingState>([]);
-    const { data, fetchNextPage, isError, isFetching, isLoading } = useInfiniteQuery<UserApiResponse>({
-        queryKey: ["users"],
-        queryFn: async ({ pageParam = 0 }) => {
-            const url = new URL(
-                '/users', 'https://64ade1c4b470006a5ec677a5.mockapi.io',
-            );
-            url.searchParams.set('limit', `${Number(pageParam) * fetchSize}`);
-            url.searchParams.set('page', `${Number(pageParam)}`);
 
-            const response = await fetch(url.href);
-            const json = (await response.json()) as UserApiResponse;
-            return json;
-        },
-        getNextPageParam: (_lastGroup, groups) => groups.length,
-        defaultPageParam: 1,
+    const [pageParam, setPageParam] = useState(1)
+    async function fetchUsers(page: number, limit: number) {
+        const response = await api.get<UserApiResponse>(`/users?page=${page}&limit=${limit}`).then((res) => res);
+        setPageParam(response.data.page)
+        return response.data
+    }
+    const { data, fetchNextPage, isError, isFetching, isLoading, hasNextPage, } = useInfiniteQuery<UserApiResponse>({
+        queryKey: ["users", pageParam],
+        queryFn: ({ pageParam = 1 }) => fetchUsers(Number(pageParam), Number(pageParam) * fetchSize),
+        // getNextPageParam: (_lastGroup, groups) => groups.length,
+        getNextPageParam: (lastGroup, groups) => lastGroup.data && groups.length + 1,
+        defaultPageParam: pageParam,
         refetchOnWindowFocus: false,
     })
 
     const flatData = data?.pages[0] ?? []
 
-    const totalDBRowCount = data?.pages?.[0]?.meta?.totalRowCount ?? 0;
+    const totalDBRowCount = data?.pages?.[0]?.totalRowCount ?? 0;
+    // const totalDBRowCount = data?.pages?.[0]?.meta?.totalRowCount ?? 0;
     const totalFetched = flatData.toString().length;
 
     const fetchMoreOnBottomReached = useCallback(
-        (containerRefElement?: HTMLDivElement | null) => {
+        (containerRefElement: HTMLDivElement | null) => {
+            let fetching = false;
+
             if (containerRefElement) {
                 const { scrollHeight, scrollTop, clientHeight } = containerRefElement;
-
+                // if (
+                //     Number(data?.pages.length) > 0 &&
+                //     !isFetching &&
+                //     Number(data?.pages?.[0].page) <
+                //     (fetchSize.toString().length === 0
+                //         ? Number(data?.pages?.[0].totalRowCount) - 1
+                //         : Number(data?.pages?.[0].totalRowCount))
+                // ) {
+                //     fetchNextPage();
+                // }
                 if (
                     scrollHeight - scrollTop - clientHeight < 400 &&
-                    !isFetching &&
-                    totalFetched < totalDBRowCount
+                    !isFetching
+                    // && totalFetched < totalDBRowCount
                 ) {
-                    fetchNextPage();
+                    fetching = true;
+                    fetchNextPage().then(() => { fetching = false; });
+                    fetching = false;
                 }
             }
         },
-        [fetchNextPage, isFetching, totalFetched, totalDBRowCount],
+        [fetchNextPage, isFetching, totalFetched, totalDBRowCount, pageParam],
     );
 
     useEffect(() => {
@@ -99,15 +114,15 @@ export function HomePage() {
         } catch (error) {
             console.error(error);
         }
-    }, [sorting, columnFilters, globalFilter]);
+    }, [sorting, columnFilters, globalFilter, pageParam, hasNextPage]);
 
     useEffect(() => {
         fetchMoreOnBottomReached(tableContainerRef.current);
-    }, [fetchMoreOnBottomReached]);
+    }, [fetchMoreOnBottomReached, pageParam, hasNextPage]);
 
     return (
         <>
-            <Typography style={{ textAlign: "center" }} variant="h5">HOME</Typography>
+            {/* <Typography style={{ textAlign: "center" }} variant="h5">HOME</Typography>
             <div style={{ maxWidth: "80%", margin: "0 auto" }}>
 
                 <MaterialReactTable
@@ -118,14 +133,14 @@ export function HomePage() {
                     enableRowVirtualization
                     manualFiltering
                     manualSorting
-                    muiTableProps={{
-                        ref: tableContainerRef,
-                    }}
                     muiTableContainerProps={{
+                        ref: tableContainerRef,
                         sx: { maxHeight: '600px' },
                         onScroll: (
                             event: UIEvent<HTMLDivElement>,
-                        ) => fetchMoreOnBottomReached(event.target as HTMLDivElement),
+                        ) => {
+                            fetchMoreOnBottomReached(event.target as HTMLDivElement)
+                        },
                     }}
                     muiToolbarAlertBannerProps={
                         isError
@@ -148,8 +163,13 @@ export function HomePage() {
                     }}
                     rowVirtualizerInstanceRef={rowVirtualizerInstanceRef} //get access to the virtualizer instance
                     rowVirtualizerProps={{ overscan: 4 }}
-                />
-            </div>
+                /> */}
+
+
+
+                <h1>Teste</h1>
+                <Teste />
+            {/* </div> */}
         </>
     )
 }
